@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ABYSS CORE（アビス・コア）― 深海資源×海底データセンター構築シム</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-shell">
+    <!-- 背面フルスクリーンメインCanvas -->
+    <canvas id="abyss-canvas" aria-label="深海プラント＆海底データセンター構築フィールド"></canvas>
+
+    <!-- 上部ステータスバー -->
+    <header id="top-hud" role="banner">
+      <div class="hud-brand">
+        <span class="brand-emblem" aria-hidden="true">◈</span>
+        <div class="brand-text">
+          <h1 class="brand-title">ABYSS CORE</h1>
+          <span class="brand-sub">深度 2,400m · 深海水温 4℃</span>
+        </div>
+      </div>
+
+      <div class="hud-telemetry" aria-live="polite">
+        <div class="telemetry-pill pill-funds" title="保有資金（地上アップリンクから獲得）">
+          <span class="pill-label">保有資金</span>
+          <strong id="stat-funds" class="pill-value">$80</strong>
+        </div>
+        <div class="telemetry-pill pill-income" title="直近の1秒あたり収益レート">
+          <span class="pill-label">収益速度</span>
+          <strong id="stat-income" class="pill-value">+$0.0/s</strong>
+        </div>
+        <div class="telemetry-pill pill-power" title="稼働中の電力供給バランス">
+          <span class="pill-label">電力供給</span>
+          <strong id="stat-power" class="pill-value">12 MW</strong>
+        </div>
+        <div id="pill-heat-wrap" class="telemetry-pill pill-heat is-cool" title="深海周囲水温 4℃ 環境下における稼働装置の最高コア温度（65℃以下で冷却促進・80℃超で過熱警告）">
+          <span class="pill-label">装置温度</span>
+          <strong id="stat-heat" class="pill-value">4℃</strong>
+        </div>
+        <div id="stat-tidy" class="telemetry-pill pill-tidy" title="配線が交差せず美しく整うと通信・流速が+20%加速">
+          <span class="pill-label">美観補正</span>
+          <strong class="pill-value">整頓待機</strong>
+        </div>
+        <div class="telemetry-pill pill-step" title="現在のチュートリアル進行フェーズ">
+          <span class="pill-label">進行度</span>
+          <strong id="stat-step" class="pill-value">STEP 1/4</strong>
+        </div>
+      </div>
+
+      <div class="hud-actions">
+        <button id="btn-cable-mode" type="button" class="hud-btn" title="配線の描画形状を切り替え">
+          <span class="btn-icon" aria-hidden="true">〰</span>
+          <span id="cable-mode-label">曲線ベジェ</span>
+        </button>
+        <button id="btn-encyclopedia" type="button" class="hud-btn hud-btn-accent" title="動く図解ヘルプ図鑑を開く">
+          <span class="btn-icon" aria-hidden="true">📘</span>
+          <span>技術図鑑</span>
+        </button>
+        <button id="btn-audio-mute" type="button" class="hud-btn" title="深海ASMRと効果音のON/OFF切り替え">
+          <span class="btn-icon" aria-hidden="true">🔊</span>
+          <span id="audio-mute-label">音響 ON</span>
+        </button>
+        <button id="btn-reset-save" type="button" class="hud-btn hud-btn-danger" title="プラントと進行状況を初期状態へ戻す">
+          <span class="btn-icon" aria-hidden="true">↺</span>
+          <span>初期化</span>
+        </button>
+        <span id="autosave-indicator" class="autosave-badge" title="ブラウザに自動保存されます">自動保存済み</span>
+      </div>
+    </header>
+
+    <!-- 左/中央フローティング：ノード詳細設定ポップアップ -->
+    <aside id="node-inspector" class="glass-panel is-hidden" aria-label="選択中ノードの詳細設定">
+      <div class="panel-header">
+        <div>
+          <span id="inspector-category" class="badge-category">汎用ハイブリッド</span>
+          <h2 id="inspector-title" class="panel-title">汎用モジュール</h2>
+        </div>
+        <button id="btn-inspector-close" type="button" class="icon-close-btn" aria-label="詳細パネルを閉じる">✕</button>
+      </div>
+
+      <div class="inspector-body">
+        <div class="status-row">
+          <span class="row-label">稼働状態</span>
+          <span id="inspector-status" class="status-chip">待機中</span>
+        </div>
+
+        <div id="inspector-heat-row" class="heat-meter-block">
+          <div class="heat-meter-head">
+            <span class="row-label">コア温度（深海4℃・80℃半減）</span>
+            <strong id="inspector-heat-value">4℃</strong>
+          </div>
+          <div class="meter-track">
+            <div id="inspector-heat-bar" class="meter-fill" style="width: 4%;"></div>
+          </div>
+        </div>
+
+        <div class="status-row">
+          <span class="row-label">総合効率</span>
+          <strong id="inspector-efficiency" class="eff-readout">100%</strong>
+        </div>
+
+        <!-- 汎用モジュール専用ハイブリッド操作 -->
+        <div id="inspector-hybrid-controls" class="hybrid-controls is-hidden">
+          <div class="control-group">
+            <span class="control-label">動作モード切替</span>
+            <div class="mode-switch" role="group" aria-label="汎用モジュール動作モード">
+              <button id="btn-mode-data" type="button" class="mode-btn is-active" data-mode="data">データ処理モード</button>
+              <button id="btn-mode-filter" type="button" class="mode-btn" data-mode="filter">物理濾過モード</button>
+            </div>
+          </div>
+
+          <div id="slider-precision-wrap" class="control-group">
+            <div class="slider-head">
+              <label for="slider-precision" class="control-label">クロック速度 ⇔ 圧縮精度</label>
+              <strong id="slider-precision-pct" class="slider-pct">20%</strong>
+            </div>
+            <input id="slider-precision" type="range" min="0" max="100" step="1" value="20">
+            <div class="slider-scale">
+              <span>◀ 速度（高発熱・多量）</span>
+              <span>精度（単価2.5倍・詰まり解消）▶</span>
+            </div>
+            <p id="slider-readout" class="slider-readout">出力: 精製データ / 単価倍率: 1.6x</p>
+          </div>
+        </div>
+
+        <!-- ポート＆接続リスト -->
+        <div class="ports-section">
+          <h3 class="sub-heading">入出力ポート・接続配管</h3>
+          <div id="inspector-ports" class="ports-list"></div>
+        </div>
+      </div>
+
+      <div class="inspector-footer">
+        <button id="btn-node-guide" type="button" class="hud-btn hud-btn-accent">📘 図鑑で確認</button>
+        <button id="btn-node-delete" type="button" class="hud-btn hud-btn-danger">解体回収</button>
+      </div>
+    </aside>
+
+    <!-- 右下：相棒ロボ「ブギー（B.U.G.-01）」通信ドック -->
+    <aside id="boogie-dock" class="glass-panel" aria-label="相棒ロボ ブギー 通信ドック">
+      <div class="panel-header boogie-header">
+        <div class="boogie-id-group">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span class="boogie-name" title="深海汎用作業ロボ B.U.G.-01">相棒ロボ ブギー</span>
+          <span id="boogie-step-label" class="step-pill">STEP 1</span>
+        </div>
+        <div class="boogie-header-btns">
+          <button id="btn-guide-laser" type="button" class="mini-btn is-active" title="ホログラム誘導レーザーの表示ON/OFF">光線ON</button>
+          <button id="btn-boogie-toggle" type="button" class="mini-btn" aria-label="通信ドックを折りたたむ">＿</button>
+        </div>
+      </div>
+
+      <div id="boogie-body" class="boogie-body">
+        <div class="boogie-top-row">
+          <div id="boogie-avatar-wrap" class="boogie-avatar-wrap" title="クリックするとブギーが反応します">
+            <div id="boogie-svg-host" class="boogie-svg-host"></div>
+            <div id="boogie-waveform" class="boogie-waveform" aria-hidden="true"></div>
+          </div>
+          <div class="boogie-speech-wrap">
+            <p id="boogie-message" class="boogie-message">システム起動完了です、所長！まずは最初のケーブルを接続しましょう。</p>
+          </div>
+        </div>
+
+        <ul id="boogie-checklist" class="boogie-checklist" aria-label="現在のミッション目標"></ul>
+
+        <div class="boogie-footer">
+          <button id="btn-boogie-hint" type="button" class="hud-btn hud-btn-accent">✦ 次の接続を光線で指す</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 下部：パーツビルドドック -->
+    <footer id="parts-dock" class="glass-panel" aria-label="深海プラント設備ドック">
+      <div id="parts-dock-list" class="parts-dock-list"></div>
+      <div id="dock-hint" class="dock-hint">
+        設備カードをクリックして配置（またはドラッグ） ／ 出力ポート●から入力ポート●へドラッグで配線 ／ 配線クリック・右クリックで解除
+      </div>
+    </footer>
+
+    <!-- 動く図解ヘルプ図鑑モーダル -->
+    <div id="encyclopedia-modal" class="modal-root is-hidden" role="dialog" aria-modal="true" aria-labelledby="enc-title">
+      <div id="encyclopedia-backdrop" class="modal-backdrop"></div>
+      <div class="encyclopedia-dialog glass-panel">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <span aria-hidden="true">📘</span>
+            <h2>深海技術図鑑 ― 動く構造マニュアル</h2>
+          </div>
+          <button id="btn-encyclopedia-close" type="button" class="icon-close-btn" aria-label="図鑑を閉じる">✕</button>
+        </div>
+
+        <div class="encyclopedia-layout">
+          <nav id="encyclopedia-tabs" class="encyclopedia-tabs" aria-label="設備パーツ一覧"></nav>
+
+          <section id="encyclopedia-detail" class="encyclopedia-detail">
+            <div class="enc-head">
+              <div>
+                <span id="enc-badge" class="badge-category">エネルギー</span>
+                <h3 id="enc-title" class="enc-title">非常用バッテリー</h3>
+              </div>
+              <span id="enc-unlock-tag" class="unlock-tag">初期解放済み</span>
+            </div>
+
+            <p id="enc-summary" class="enc-summary"></p>
+
+            <div class="encyclopedia-stage">
+              <div class="stage-bar">
+                <span class="stage-label">LIVE 動作シミュレーション図解</span>
+                <div id="enc-sim-mode-bar" class="enc-sim-mode-bar is-hidden"></div>
+              </div>
+              <canvas id="encyclopedia-canvas" width="400" height="180"></canvas>
+              <p id="enc-anim-caption" class="enc-anim-caption"></p>
+            </div>
+
+            <div id="enc-specs" class="enc-specs"></div>
+
+            <div class="enc-boogie-box">
+              <span class="boogie-tag">B.U.G.-01 メモ</span>
+              <p id="enc-boogie-tip" class="enc-boogie-tip"></p>
+            </div>
+
+            <div class="enc-footer">
+              <button id="btn-enc-apply-guide" type="button" class="hud-btn hud-btn-accent">
+                ✦ このお手本をメイン画面にガイド表示する
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- 初期化確認モーダル -->
+    <div id="reset-modal" class="modal-root is-hidden" role="dialog" aria-modal="true" aria-labelledby="reset-modal-title">
+      <div class="modal-backdrop"></div>
+      <div class="confirm-dialog glass-panel">
+        <h2 id="reset-modal-title" class="panel-title">セーブデータの初期化</h2>
+        <p class="confirm-text">現在の海底プラント配置とチュートリアル進行状況をリセットし、初期状態からやり直しますか？</p>
+        <div class="confirm-actions">
+          <button id="btn-reset-cancel" type="button" class="hud-btn">キャンセル</button>
+          <button id="btn-reset-confirm" type="button" class="hud-btn hud-btn-danger">初期化する</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- フローティングツールチップ -->
+    <div id="canvas-tooltip" class="canvas-tooltip is-hidden" role="tooltip"></div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="audio.js"></script>
+  <script src="boogie.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
